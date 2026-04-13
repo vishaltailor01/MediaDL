@@ -1,0 +1,14 @@
+# Linting and formatting configuration for Python
+[tool.black]
+line-length = 88
+target-version = ['py311']
+
+[tool.ruff]
+line-length = 88
+select = ["E", "F", "W", "C90", "I", "N", "D", "UP", "S", "B", "A", "C4", "T20", "Q", "RUF"]
+ignore = ["E501"]
+exclude = [".venv", "__pycache__", "build", "dist"]
+
+[tool.isort]
+profile = "black"
+line_length = 88

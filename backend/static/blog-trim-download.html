@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trim Before You Download: Cut Only the Part You Need &mdash; MediaDL</title>
+  <meta name="description" content="Save time and storage by trimming a video or audio clip to the exact start and end time before downloading with MediaDL.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="/static/css/tailwind.min.css" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d0d1a; --card-bg: rgba(255,255,255,0.04); --card-border: rgba(255,255,255,0.09);
+      --accent: #6366f1; --accent2: #8b5cf6; --text: #f1f5f9; --text-sub: #94a3b8; --text-muted: #4b5563;
+      --input-bg: rgba(255,255,255,0.06); --input-border: rgba(255,255,255,0.11); --nav-bg: rgba(13,13,26,0.85);
+    }
+    [data-theme="light"] {
+      --bg: #eef2ff; --card-bg: rgba(255,255,255,0.85); --card-border: rgba(99,102,241,0.14);
+      --text: #1e293b; --text-sub: #475569; --text-muted: #94a3b8;
+      --input-bg: rgba(255,255,255,0.95); --input-border: rgba(99,102,241,0.22); --nav-bg: rgba(238,242,255,0.92);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; transition: background 0.3s, color 0.3s; }
+    body::before { content: ''; position: fixed; inset: 0; background: radial-gradient(ellipse 60% 50% at 15% 15%, rgba(99,102,241,0.12) 0%, transparent 60%); pointer-events: none; z-index: 0; }
+    .navbar { position: sticky; top: 0; z-index: 100; background: var(--nav-bg); border-bottom: 1px solid var(--card-border); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); padding: 0 2rem; height: 62px; display: flex; align-items: center; justify-content: space-between; }
+    .navbar .logo { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; }
+    .logo-squares { display: flex; gap: 3px; flex-wrap: wrap; width: 26px; }
+    .logo-sq { width: 10px; height: 10px; border-radius: 2.5px; }
+    .logo-sq:nth-child(1) { background: #6366f1; } .logo-sq:nth-child(2) { background: #8b5cf6; }
+    .logo-sq:nth-child(3) { background: #10b981; } .logo-sq:nth-child(4) { background: #6366f1; opacity: 0.6; }
+    .nav-brand { font-size: 1.18rem; font-weight: 800; letter-spacing: -0.5px; background: linear-gradient(120deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .nav-links { display: flex; align-items: center; gap: 0.25rem; list-style: none; }
+    .nav-links a { color: var(--text-sub); text-decoration: none; font-size: 0.875rem; font-weight: 500; padding: 0.4rem 0.75rem; border-radius: 8px; transition: all 0.2s; }
+    .nav-links a:hover, .nav-links a.active { color: var(--text); background: var(--input-bg); }
+    .nav-right { display: flex; align-items: center; gap: 0.5rem; }
+    .theme-btn { width: 38px; height: 38px; background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-sub); transition: all 0.2s; }
+    .theme-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); transform: rotate(22deg); }
+    .hamburger { display: none; background: none; border: none; cursor: pointer; color: var(--text-sub); padding: 0.25rem; border-radius: 6px; }
+    .main-wrapper { position: relative; z-index: 1; }
+    .article-hero { height: 240px; display: flex; align-items: center; justify-content: center; font-size: 5rem; background: linear-gradient(135deg, #1a0a2e 0%, #1e0a3a 100%); }
+    .article-container { max-width: 740px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+    .article-back { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--text-muted); text-decoration: none; font-size: 0.82rem; font-weight: 500; margin-bottom: 1.75rem; transition: color 0.2s; }
+    .article-back:hover { color: var(--accent); }
+    .article-meta { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1rem; }
+    .article-tag { font-size: 0.68rem; font-weight: 700; padding: 0.18rem 0.6rem; border-radius: 5px; text-transform: uppercase; letter-spacing: 0.3px; background: rgba(99,102,241,0.15); color: var(--accent); }
+    .article-date { font-size: 0.78rem; color: var(--text-muted); }
+    .article-title { font-size: clamp(1.6rem, 4vw, 2.2rem); font-weight: 800; letter-spacing: -0.5px; line-height: 1.25; margin-bottom: 0.75rem; }
+    .article-subtitle { font-size: 1.05rem; color: var(--text-sub); line-height: 1.65; margin-bottom: 2.5rem; padding-bottom: 2rem; border-bottom: 1px solid var(--card-border); }
+    .article-body h2 { font-size: 1.2rem; font-weight: 700; margin: 2.25rem 0 0.75rem; }
+    .article-body p { font-size: 0.925rem; color: var(--text-sub); line-height: 1.8; margin-bottom: 1rem; }
+    .article-body ul, .article-body ol { padding-left: 1.4rem; margin-bottom: 1rem; }
+    .article-body li { font-size: 0.925rem; color: var(--text-sub); line-height: 1.75; margin-bottom: 0.3rem; }
+    .article-body a { color: var(--accent); }
+    .article-body strong { color: var(--text); font-weight: 600; }
+    .steps-list { list-style: none; padding-left: 0; counter-reset: steps; }
+    .steps-list li { counter-increment: steps; display: flex; gap: 1rem; align-items: flex-start; margin-bottom: 1.25rem; }
+    .steps-list li::before { content: counter(steps); min-width: 30px; height: 30px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.78rem; font-weight: 700; color: #fff; flex-shrink: 0; margin-top: 2px; }
+    .tip-box { background: var(--card-bg); border: 1px solid var(--card-border); border-left: 4px solid var(--accent); border-radius: 10px; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+    .tip-box p { color: var(--text-sub); font-size: 0.875rem; margin-bottom: 0; }
+    .tip-box strong { color: var(--accent); }
+    .use-case-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem; margin: 1rem 0 1.5rem; }
+    .use-case { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 1rem; }
+    .use-case .icon { font-size: 1.5rem; margin-bottom: 0.4rem; }
+    .use-case strong { font-size: 0.85rem; display: block; margin-bottom: 0.2rem; }
+    .use-case span { font-size: 0.8rem; color: var(--text-sub); }
+    .cta-box { background: linear-gradient(135deg, rgba(99,102,241,0.12), rgba(139,92,246,0.12)); border: 1px solid rgba(99,102,241,0.25); border-radius: 14px; padding: 1.75rem; text-align: center; margin: 3rem 0 0; }
+    .cta-box h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .cta-box p { font-size: 0.875rem; color: var(--text-sub); margin-bottom: 1.25rem; }
+    .cta-btn { display: inline-block; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; text-decoration: none; font-size: 0.9rem; font-weight: 700; padding: 0.7rem 1.75rem; border-radius: 10px; transition: opacity 0.2s, transform 0.2s; }
+    .cta-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .site-footer { border-top: 1px solid var(--card-border); padding: 2rem 1.5rem; text-align: center; }
+    .footer-links { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0.25rem 0.5rem; list-style: none; margin-bottom: 1rem; }
+    .footer-links a { color: var(--text-sub); text-decoration: none; font-size: 0.85rem; font-weight: 500; padding: 0.25rem 0.5rem; border-radius: 6px; transition: color 0.2s; }
+    .footer-links a:hover { color: var(--accent); }
+    .footer-links li:not(:last-child)::after { content: '·'; color: var(--text-muted); margin-left: 0.5rem; font-size: 0.85rem; }
+    .footer-copy { font-size: 0.8rem; color: var(--text-muted); }
+    @media (max-width: 640px) {
+      .navbar { padding: 0 1rem; } .nav-links { display: none; }
+      .nav-links.open { display: flex; flex-direction: column; position: absolute; top: 62px; left: 0; right: 0; background: var(--nav-bg); border-bottom: 1px solid var(--card-border); padding: 0.75rem 1rem; gap: 0.25rem; }
+      .nav-links a { width: 100%; } .hamburger { display: flex !important; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar" role="navigation" aria-label="Main navigation">
+    <a href="/" class="logo" aria-label="MediaDL home">
+      <div class="logo-squares" aria-hidden="true">
+        <div class="logo-sq"></div><div class="logo-sq"></div>
+        <div class="logo-sq"></div><div class="logo-sq"></div>
+      </div>
+      <span class="nav-brand">MediaDL</span>
+    </a>
+    <ul class="nav-links" id="nav-links">
+      <li><a href="/">Home</a></li>
+      <li><a href="/blog" class="active">Blogs</a></li>
+      <li><a href="/faq">FAQ</a></li>
+    </ul>
+    <div class="nav-right">
+      <button class="theme-btn" id="theme-btn" title="Toggle theme" aria-label="Toggle theme">
+        <svg id="theme-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
+      </button>
+      <button class="hamburger" id="hamburger" aria-label="Toggle menu" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+    </div>
+  </nav>
+
+  <div class="main-wrapper">
+    <div class="article-hero">✂️</div>
+
+    <div class="article-container">
+      <a href="/blog" class="article-back">&#8592; Back to Blog</a>
+
+      <div class="article-meta">
+        <span class="article-tag">Feature</span>
+        <span class="article-date">February 20, 2026</span>
+      </div>
+      <h1 class="article-title">Trim Before You Download: Cut Only the Part You Need</h1>
+      <p class="article-subtitle">Save time and storage by trimming a video or audio clip to the exact start and end time before downloading. Here's how to use the trim feature.</p>
+
+      <div class="article-body">
+        <p>Nobody wants to download a two-hour video just to keep a three-minute clip. MediaDL's built-in trim feature lets you specify exactly which portion of a video you want — the server clips it for you before the file ever reaches your device.</p>
+
+        <h2>Why Trim Before Downloading?</h2>
+        <div class="use-case-grid">
+          <div class="use-case">
+            <div class="icon">🎵</div>
+            <strong>Save a song</strong>
+            <span>Extract a single track from a mix or album stream</span>
+          </div>
+          <div class="use-case">
+            <div class="icon">🎤</div>
+            <strong>Clip a quote</strong>
+            <span>Grab a 30-second soundbite from a long interview</span>
+          </div>
+          <div class="use-case">
+            <div class="icon">📺</div>
+            <strong>Highlight reel</strong>
+            <span>Cut the best moments from a sports or gaming video</span>
+          </div>
+          <div class="use-case">
+            <div class="icon">📖</div>
+            <strong>Lecture segment</strong>
+            <span>Keep only the relevant section of an online lecture</span>
+          </div>
+        </div>
+
+        <h2>How to Use the Trim Feature</h2>
+        <ol class="steps-list">
+          <li><strong>Paste your URL</strong> into the MediaDL input field as normal.</li>
+          <li><strong>Toggle the Trim option</strong> — click "Enable trim" below the format selector to reveal the time inputs.</li>
+          <li><strong>Enter Start time</strong> in <code>HH:MM:SS</code> format (e.g. <code>00:02:30</code> for 2 minutes 30 seconds).</li>
+          <li><strong>Enter End time</strong> in the same format. Leave it blank to trim to the end of the video.</li>
+          <li><strong>Click Download.</strong> The server fetches the full video, applies the trim using FFmpeg, and delivers only the clipped segment.</li>
+        </ol>
+
+        <div class="tip-box">
+          <p><strong>Tip:</strong> Use YouTube's timestamp URLs to find exact times. Right-click any point in the YouTube player and select <em>"Copy video URL at current time"</em> — you can read the seconds directly from the <code>t=</code> parameter.</p>
+        </div>
+
+        <h2>Time Format Reference</h2>
+        <ul>
+          <li><code>00:00:30</code> — 30 seconds in</li>
+          <li><code>00:01:45</code> — 1 minute 45 seconds</li>
+          <li><code>01:20:00</code> — 1 hour 20 minutes</li>
+        </ul>
+
+        <h2>Does Trimming Affect Quality?</h2>
+        <p>No. MediaDL uses FFmpeg's stream-copy mode for MP4 trimming where possible, meaning no re-encoding occurs. For MP3 output, the audio is decoded and re-encoded at your chosen bitrate — the same quality you'd get without trimming.</p>
+
+        <h2>Can I Trim Playlists?</h2>
+        <p>Trim times apply on a per-video basis and are not supported for playlist batch downloads. For playlists, download the full files and use a local editor like Audacity or FFmpeg to trim individual tracks.</p>
+
+        <div class="cta-box">
+          <h3>Try the trim feature</h3>
+          <p>Paste a URL, set your start and end times, and download exactly what you need.</p>
+          <a href="/" class="cta-btn">Go to MediaDL &rarr;</a>
+        </div>
+      </div>
+    </div>
+
+    <footer class="site-footer" role="contentinfo">
+      <ul class="footer-links">
+        <li><a href="/faq">FAQ</a></li>
+        <li><a href="/copyright-claims">Copyright claims</a></li>
+        <li><a href="/privacy-policy">Privacy Policy</a></li>
+        <li><a href="/terms-of-use">Terms of Use</a></li>
+      </ul>
+      <p class="footer-copy">&copy; 2026 MediaDL. All rights reserved.</p>
+    </footer>
+  </div>
+
+  <script>
+    'use strict';
+    const htmlEl = document.documentElement;
+    const themeBtn = document.getElementById('theme-btn');
+    const themeIcon = document.getElementById('theme-icon');
+    const ICONS = {
+      sun:  `<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>`,
+      moon: `<path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/>`,
+    };
+    function applyTheme(t) { htmlEl.setAttribute('data-theme', t); themeIcon.innerHTML = t === 'dark' ? ICONS.sun : ICONS.moon; localStorage.setItem('theme', t); }
+    themeBtn.addEventListener('click', () => applyTheme(htmlEl.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
+    applyTheme(localStorage.getItem('theme') || 'dark');
+    const hamburger = document.getElementById('hamburger');
+    const navLinks  = document.getElementById('nav-links');
+    hamburger.addEventListener('click', () => { const open = navLinks.classList.toggle('open'); hamburger.setAttribute('aria-expanded', String(open)); });
+  </script>
+</body>
+</html>
