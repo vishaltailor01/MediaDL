@@ -1,0 +1,14 @@
+{
+  "defaults": {
+    "format": "mp4",
+    "dry_run": false
+  },
+  "limits": {
+    "maxFileSizeMB": 2048,
+    "maxTimeoutSeconds": 300
+  },
+  "engine": {
+    "sandboxEnabled": true,
+    "ffmpegPath": "ffmpeg"
+  }
+}

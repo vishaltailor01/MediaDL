@@ -1,0 +1,15 @@
+{
+  "name": "@mediadl-core/sdk",
+  "version": "1.0.0",
+  "description": "Node.js SDK for MediaDL Core Engine",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["media", "ffmpeg", "ci", "sdk"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0"
+  }
+}

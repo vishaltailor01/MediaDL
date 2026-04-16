@@ -1,0 +1,40 @@
+name: MediaDL Automated Conversion
+
+# Designed based on MediaDL PRD Core Use Case 2
+# Enables automated conversion triggers upon push to designated asset paths
+
+on:
+  push:
+    paths:
+      - 'assets/video/**'
+  workflow_dispatch:
+
+jobs:
+  convert-assets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup MediaDL Engine
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install System Dependencies
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install MediaDL Core
+        working-directory: ./mediadl-core
+        run: pip install -r requirements.txt
+
+      - name: Execute Conversion using MediaDL.config.json Limits
+        working-directory: ./mediadl-core
+        run: |
+          python3 cli/mediadl.py batch convert ../assets/video --ext .mov --to mp4
+          
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: converted-assets
+          path: assets/video/*.mp4

@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  # Local API Development Mock
+  api:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./mediadl-core:/app/mediadl-core
+    ports:
+      - "8000:8000"
+    environment:
+      - SQS_QUEUE_URL=http://sqs:9324/queue/mediadl-jobs
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+    depends_on:
+      - sqs
+
+  # Dedicated FFmpeg worker polling the queue
+  worker:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "workers/main.py"]
+    volumes:
+      - ./mediadl-core:/app/mediadl-core
+    environment:
+      - SQS_QUEUE_URL=http://sqs:9324/queue/mediadl-jobs
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+    depends_on:
+      - sqs
+
+  # LocalStack / Alpine SQS mock for queue
+  sqs:
+    image: softwaremill/elasticmq
+    ports:
+      - "9324:9324"
+      - "9325:9325"
