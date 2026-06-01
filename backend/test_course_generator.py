@@ -193,3 +193,40 @@ def test_create_course_plan_orchestrates_parser_analyzer_and_planner():
     assert response.course.target == "web"
     assert response.course.transformation_mode == "instructional"
     assert response.course.modules[0].lessons[0].title == "Intro"
+
+
+def test_parse_course_markdown_segmentation():
+    from course_generator.markdown_parser import parse_course_markdown
+    
+    markdown = """# AI Course
+    
+## 00:00 Introduction
+This is the script for introduction.
+```python
+print("Hello world")
+```
+
+## 01:30 Next Steps
+This is the script for next steps.
+"""
+    segments = parse_course_markdown(markdown)
+    assert len(segments) == 2
+    assert segments[0]["timestamp"] == "00:00"
+    assert segments[0]["title"] == "Introduction"
+    assert segments[0]["script"] == "This is the script for introduction."
+    assert segments[0]["code_snippet"] == 'print("Hello world")'
+    
+    assert segments[1]["timestamp"] == "01:30"
+    assert segments[1]["title"] == "Next Steps"
+    assert segments[1]["script"] == "This is the script for next steps."
+    assert segments[1]["code_snippet"] == ""
+
+
+def test_pillow_slide_generation(tmp_path):
+    from course_generator.service import render_slide_pillow
+    import os
+    
+    out_img = os.path.join(tmp_path, "test_slide.png")
+    render_slide_pillow("Test Heading", "import os\nprint(os.getcwd())", out_img)
+    assert os.path.exists(out_img)
+

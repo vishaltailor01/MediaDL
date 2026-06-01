@@ -438,6 +438,39 @@ def export_course(request: CoursePlanRequest):
     )
 
 
+@app.post("/course/generate-media")
+async def course_generate_media(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...)
+):
+    if not file.filename.endswith(".md"):
+        raise HTTPException(status_code=400, detail="Only Markdown (.md) files are supported.")
+        
+    task_id = create_task()
+    update_task(task_id, format="zip")
+    
+    # Save the uploaded file locally inside DOWNLOAD_DIR/task_id
+    task_dir = os.path.join(DOWNLOAD_DIR, task_id)
+    os.makedirs(task_dir, exist_ok=True)
+    temp_md_path = os.path.join(task_dir, file.filename)
+    
+    try:
+        with open(temp_md_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save upload: {str(e)}")
+        
+    background_tasks.add_task(
+        yt_tasks.generate_ai_course_media_task,
+        temp_md_path,
+        task_id
+    )
+    
+    return {"task_id": task_id}
+
+
+
 @app.get("/course/download/{package_id}")
 def download_course_package(package_id: str):
     if not re.match(r"^[a-zA-Z0-9_.-]+$", package_id):

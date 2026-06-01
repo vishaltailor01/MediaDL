@@ -1,4 +1,4 @@
-﻿import glob
+import glob
 import os
 import re
 import shutil
@@ -576,3 +576,178 @@ def download_and_convert(
         update_task(task_id, status="cancelled")
     except Exception as exc:
         update_task(task_id, status="error", error=str(exc))
+
+
+
+async def generate_ai_course_media_task(md_file_path: str, task_id: str | None = None):
+    import sys
+    import os
+    import shutil
+    import tempfile
+    import uuid
+    import asyncio
+    
+    # Ensure mediadl-core/engine is in sys.path
+    engine_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "mediadl-core", "engine"))
+    if engine_path not in sys.path:
+        sys.path.insert(0, engine_path)
+    from ffmpeg_wrapper import FfmpegEngine
+    
+    from course_generator.markdown_parser import parse_course_markdown
+    from course_generator.service import generate_slide_image, synthesize_narration
+    from course_generator.exporter import transcribe_audio_to_srt
+    
+    temp_dir = tempfile.mkdtemp()
+    
+    try:
+        if task_id:
+            update_task(
+                task_id,
+                status="processing",
+                progress_pct=5,
+                current_track="Parsing course markdown"
+            )
+            
+        # 1. Read and parse markdown
+        with open(md_file_path, "r", encoding="utf-8") as f:
+            md_content = f.read()
+            
+        segments = parse_course_markdown(md_content)
+        if not segments:
+            raise ValueError("No valid course segments found in Markdown.")
+            
+        if task_id:
+            update_task(
+                task_id,
+                progress_pct=10,
+                current_track=f"Found {len(segments)} segments. Generating media..."
+            )
+            
+        # 2. Generate slides and audio narration for each segment
+        segments_data = []
+        for i, seg in enumerate(segments):
+            if task_id and is_cancelled(task_id):
+                update_task(task_id, status="cancelled")
+                return
+                
+            title = seg["title"]
+            script = seg["script"]
+            code = seg["code_snippet"]
+            
+            # Progress update
+            if task_id:
+                update_task(
+                    task_id,
+                    current_track=f"Processing segment {i+1}/{len(segments)}: {title}",
+                    progress_pct=10 + int((i / len(segments)) * 50)
+                )
+                
+            slide_path = os.path.join(temp_dir, f"slide_{i}.png")
+            await generate_slide_image(title, code, slide_path)
+            
+            # Synthesize narration
+            try:
+                audio_path = synthesize_narration(script, temp_dir)
+            except Exception as e:
+                raise RuntimeError(f"Error in segment {i+1} ('{title}'): {str(e)}")
+                
+            segments_data.append({
+                "slide_path": slide_path,
+                "audio_path": audio_path
+            })
+            
+        if task_id and is_cancelled(task_id):
+            update_task(task_id, status="cancelled")
+            return
+            
+        if task_id:
+            update_task(
+                task_id,
+                progress_pct=60,
+                current_track="Compiling course video using FFmpeg"
+            )
+            
+        # 3. Compile Master Video
+        ffmpeg_engine = FfmpegEngine(ffmpeg_path=FFMPEG_PATH)
+        master_video_path = os.path.join(temp_dir, "course_video.mp4")
+        await ffmpeg_engine.compile_course_video(segments_data, master_video_path)
+        
+        if task_id and is_cancelled(task_id):
+            update_task(task_id, status="cancelled")
+            return
+            
+        if task_id:
+            update_task(
+                task_id,
+                progress_pct=80,
+                current_track="Transcribing audio for captions"
+            )
+            
+        # 4. Compile Master Audio Narration & Transcribe
+        master_audio_path = os.path.join(temp_dir, "master_narration.wav")
+        
+        async def concat_wavs(ffmpeg_bin: str, wav_files: list[str], dest: str):
+            cmd = [ffmpeg_bin, "-y"]
+            for w in wav_files:
+                cmd.extend(["-i", w])
+            num_files = len(wav_files)
+            filter_str = "".join(f"[{k}:a]" for k in range(num_files)) + f"concat=n={num_files}:v=0:a=1[outa]"
+            cmd.extend(["-filter_complex", filter_str, "-map", "[outa]", dest])
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            _, err = await proc.communicate()
+            if proc.returncode != 0:
+                raise RuntimeError(f"FFmpeg audio concat failed: {err.decode('utf-8', errors='replace')}")
+                
+        wav_files = [seg["audio_path"] for seg in segments_data]
+        await concat_wavs(ffmpeg_engine.ffmpeg_path, wav_files, master_audio_path)
+        
+        srt_path = os.path.join(temp_dir, "course_subtitles.srt")
+        transcribe_audio_to_srt(master_audio_path, srt_path)
+        
+        if task_id:
+            update_task(
+                task_id,
+                progress_pct=95,
+                current_track="Packaging finalized assets"
+            )
+            
+        # 5. Create final zip package
+        package_uuid = str(uuid.uuid4())
+        package_dir_name = f"course-media-{package_uuid}"
+        package_dir = os.path.join(os.path.dirname(md_file_path), package_dir_name)
+        os.makedirs(package_dir, exist_ok=True)
+        
+        shutil.copy(master_video_path, os.path.join(package_dir, "course_video.mp4"))
+        shutil.copy(srt_path, os.path.join(package_dir, "course_subtitles.srt"))
+        shutil.copy(md_file_path, os.path.join(package_dir, "course.md"))
+        
+        zip_base = os.path.join(os.path.dirname(md_file_path), f"course_media_package_{task_id or package_uuid}")
+        zip_path = shutil.make_archive(zip_base, "zip", package_dir)
+        
+        shutil.rmtree(package_dir, ignore_errors=True)
+        
+        if task_id:
+            update_task(
+                task_id,
+                status="completed",
+                result_file=zip_path,
+                progress_pct=100,
+                current_track=None
+            )
+            
+    except Exception as exc:
+        if task_id:
+            update_task(
+                task_id,
+                status="error",
+                error=str(exc),
+                current_track=None
+            )
+        raise exc
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+

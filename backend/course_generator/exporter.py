@@ -132,3 +132,56 @@ def export_course_package(
 
     zip_file = shutil.make_archive(str(package_dir), "zip", package_dir)
     return package_dir, Path(zip_file)
+
+
+def transcribe_audio_to_srt(audio_path: str, srt_path: str) -> None:
+    """
+    Integrates faster-whisper to transcribe the master audio track and output a time-synced SRT file.
+    Performs regex technical vocabulary corrections (e.g. LLM, RAG, LangChain).
+    """
+    from faster_whisper import WhisperModel
+    import re
+    
+    # Load WhisperModel (tiny model size on CPU using int8 quantization)
+    model = WhisperModel("tiny", device="cpu", compute_type="int8")
+    
+    segments, info = model.transcribe(audio_path, beam_size=5)
+    
+    def correct_vocab(text: str) -> str:
+        corrections = {
+            r"\blang[\s_-]?chain\b": "LangChain",
+            r"\brag\b": "RAG",
+            r"\bllm\b": "LLM",
+            r"\bllms\b": "LLMs",
+            r"\bonnx\b": "ONNX",
+            r"\bffmpeg\b": "FFmpeg",
+            r"\bfastapi\b": "FastAPI",
+            r"\bmarkdown\b": "Markdown",
+            r"\bpython\b": "Python",
+            r"\bmistune\b": "Mistune",
+            r"\bmoviepy\b": "MoviePy",
+            r"\bplaywright\b": "Playwright",
+            r"\bwhisper\b": "Whisper",
+            r"\bkokoro\b": "Kokoro",
+            r"\bagentic\b": "Agentic",
+        }
+        for pattern, replacement in corrections.items():
+            text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+        return text
+
+    def format_ts(seconds: float) -> str:
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        millis = int((seconds % 1) * 1000)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+        
+    with open(srt_path, "w", encoding="utf-8") as f:
+        for index, segment in enumerate(segments, start=1):
+            start_str = format_ts(segment.start)
+            end_str = format_ts(segment.end)
+            text = correct_vocab(segment.text.strip())
+            f.write(f"{index}\n")
+            f.write(f"{start_str} --> {end_str}\n")
+            f.write(f"{text}\n\n")
+
