@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Markdown Course Generator - MediaDL</title>
+  <meta name="description" content="Turn Markdown files into course outlines, lesson assets, video scripts, quizzes, and exportable course packages.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="/static/css/tailwind.min.css" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d0d1a;
+      --card-bg: rgba(255,255,255,0.04);
+      --card-border: rgba(255,255,255,0.09);
+      --accent: #6366f1;
+      --accent2: #8b5cf6;
+      --accent-glow: rgba(99,102,241,0.35);
+      --success: #10b981;
+      --error: #ef4444;
+      --warning: #f59e0b;
+      --text: #f1f5f9;
+      --text-sub: #94a3b8;
+      --text-muted: #64748b;
+      --input-bg: rgba(255,255,255,0.06);
+      --input-border: rgba(255,255,255,0.11);
+      --input-focus: rgba(99,102,241,0.45);
+      --nav-bg: rgba(13,13,26,0.85);
+      --surface: rgba(255,255,255,0.03);
+    }
+    [data-theme="light"] {
+      --bg: #eef2ff;
+      --card-bg: rgba(255,255,255,0.88);
+      --card-border: rgba(99,102,241,0.14);
+      --text: #1e293b;
+      --text-sub: #475569;
+      --text-muted: #94a3b8;
+      --input-bg: rgba(255,255,255,0.95);
+      --input-border: rgba(99,102,241,0.22);
+      --input-focus: rgba(99,102,241,0.3);
+      --nav-bg: rgba(238,242,255,0.92);
+      --surface: rgba(99,102,241,0.04);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      transition: background 0.3s, color 0.3s;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 60% 50% at 15% 15%, rgba(99,102,241,0.18) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 45% at 85% 80%, rgba(139,92,246,0.14) 0%, transparent 55%),
+        radial-gradient(ellipse 40% 35% at 55% 40%, rgba(16,185,129,0.06) 0%, transparent 55%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .navbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      height: 62px;
+      padding: 0 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--nav-bg);
+      border-bottom: 1px solid var(--card-border);
+      -webkit-backdrop-filter: blur(20px);
+      backdrop-filter: blur(20px);
+    }
+    .logo { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; }
+    .logo-squares { display: flex; gap: 3px; flex-wrap: wrap; width: 26px; }
+    .logo-sq { width: 10px; height: 10px; border-radius: 2.5px; }
+    .logo-sq:nth-child(1) { background: #6366f1; }
+    .logo-sq:nth-child(2) { background: #8b5cf6; }
+    .logo-sq:nth-child(3) { background: #10b981; }
+    .logo-sq:nth-child(4) { background: #6366f1; opacity: 0.6; }
+    .nav-brand {
+      font-size: 1.18rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(120deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .nav-links { display: flex; align-items: center; gap: 0.25rem; list-style: none; }
+    .nav-links a {
+      color: var(--text-sub);
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+      padding: 0.4rem 0.75rem;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+    .nav-links a:hover, .nav-links a.active { color: var(--text); background: var(--input-bg); }
+    .nav-right { display: flex; align-items: center; gap: 0.5rem; }
+    .theme-btn, .hamburger {
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 50%;
+      color: var(--text-sub);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .theme-btn { width: 38px; height: 38px; min-width: 38px; }
+    .theme-btn:hover, .hamburger:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .hamburger { display: none; width: 38px; height: 38px; }
+    .page {
+      position: relative;
+      z-index: 1;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem 4rem;
+    }
+    .page-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 1.5rem;
+      align-items: end;
+      margin-bottom: 1.5rem;
+    }
+    h1 {
+      font-size: clamp(1.8rem, 4vw, 3rem);
+      line-height: 1.05;
+      letter-spacing: -1.2px;
+      font-weight: 800;
+      max-width: 760px;
+    }
+    .lead {
+      color: var(--text-sub);
+      max-width: 720px;
+      margin-top: 0.85rem;
+      line-height: 1.65;
+      font-size: 1rem;
+    }
+    .status-pill {
+      border: 1px solid var(--card-border);
+      background: var(--surface);
+      border-radius: 999px;
+      padding: 0.55rem 0.85rem;
+      color: var(--text-sub);
+      font-size: 0.82rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1.02fr) minmax(360px, 0.98fr);
+      gap: 1rem;
+      align-items: start;
+    }
+    .panel {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 22px;
+      padding: 1.35rem;
+      -webkit-backdrop-filter: blur(20px);
+      backdrop-filter: blur(20px);
+      box-shadow: 0 24px 54px rgba(0,0,0,0.28);
+    }
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .panel-title {
+      font-size: 0.78rem;
+      font-weight: 800;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+    }
+    .field { margin-bottom: 1rem; }
+    .field label {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 800;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      margin-bottom: 0.45rem;
+    }
+    .md-input {
+      width: 100%;
+      min-height: 420px;
+      resize: vertical;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 14px;
+      color: var(--text);
+      font: 0.9rem/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
+      padding: 1rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .md-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--input-focus);
+    }
+    .upload-row {
+      display: flex;
+      gap: 0.6rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .file-input {
+      flex: 1;
+      min-width: 220px;
+      color: var(--text-sub);
+      background: var(--input-bg);
+      border: 1px dashed var(--input-border);
+      border-radius: 12px;
+      padding: 0.7rem;
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.7rem;
+      margin-bottom: 1rem;
+    }
+    select {
+      width: 100%;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 12px;
+      color: var(--text);
+      padding: 0.72rem 0.8rem;
+      font: 700 0.88rem 'Inter', system-ui, sans-serif;
+      outline: none;
+    }
+    select option { background: #1a1a2e; color: #f1f5f9; }
+    .actions {
+      display: flex;
+      gap: 0.7rem;
+      flex-wrap: wrap;
+    }
+    .btn {
+      min-height: 44px;
+      border: none;
+      border-radius: 12px;
+      padding: 0.78rem 1rem;
+      font: 800 0.9rem 'Inter', system-ui, sans-serif;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.45rem;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff;
+      box-shadow: 0 4px 20px var(--accent-glow);
+    }
+    .btn-secondary {
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      color: var(--text);
+    }
+    .btn-success { background: var(--success); color: #fff; }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+    .btn:hover:not(:disabled) { transform: translateY(-1px); }
+    .preview {
+      min-height: 584px;
+      display: flex;
+      flex-direction: column;
+    }
+    .empty-state {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: var(--text-muted);
+      border: 1px dashed var(--input-border);
+      border-radius: 16px;
+      padding: 2rem;
+      line-height: 1.55;
+    }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.6rem;
+      margin-bottom: 1rem;
+    }
+    .metric {
+      background: var(--surface);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 0.8rem;
+    }
+    .metric-label {
+      font-size: 0.66rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      font-weight: 800;
+      margin-bottom: 0.25rem;
+    }
+    .metric-value {
+      color: var(--text);
+      font-weight: 800;
+      font-size: 0.92rem;
+      word-break: break-word;
+    }
+    .module-list {
+      display: grid;
+      gap: 0.7rem;
+      margin-top: 0.7rem;
+    }
+    .module-card {
+      background: var(--surface);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 0.9rem;
+    }
+    .module-card h3 {
+      font-size: 0.98rem;
+      margin-bottom: 0.45rem;
+      font-weight: 800;
+    }
+    .lesson-list {
+      display: grid;
+      gap: 0.35rem;
+      list-style: none;
+      margin-top: 0.55rem;
+    }
+    .lesson-list li {
+      color: var(--text-sub);
+      font-size: 0.86rem;
+      padding: 0.4rem 0.5rem;
+      background: rgba(255,255,255,0.03);
+      border-radius: 8px;
+    }
+    .asset-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-top: 0.8rem;
+    }
+    .asset-chip {
+      font-size: 0.68rem;
+      font-weight: 800;
+      color: var(--accent);
+      background: rgba(99,102,241,0.14);
+      border: 1px solid rgba(99,102,241,0.22);
+      padding: 0.24rem 0.45rem;
+      border-radius: 999px;
+    }
+    .toast-wrap {
+      position: fixed;
+      right: 1rem;
+      bottom: 1rem;
+      z-index: 500;
+      display: grid;
+      gap: 0.55rem;
+      max-width: min(360px, calc(100vw - 2rem));
+    }
+    .toast {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      border-radius: 12px;
+      padding: 0.8rem 0.95rem;
+      box-shadow: 0 18px 40px rgba(0,0,0,0.3);
+      -webkit-backdrop-filter: blur(18px);
+      backdrop-filter: blur(18px);
+      font-size: 0.86rem;
+      line-height: 1.45;
+    }
+    .toast.error { border-color: rgba(239,68,68,0.45); }
+    .toast.success { border-color: rgba(16,185,129,0.45); }
+    @media (max-width: 920px) {
+      .page-head, .workspace { grid-template-columns: 1fr; }
+      .controls, .summary-grid { grid-template-columns: 1fr; }
+      .preview { min-height: 360px; }
+    }
+    @media (max-width: 680px) {
+      .navbar { padding: 0 1rem; }
+      .nav-links { display: none; }
+      .nav-links.open {
+        display: flex;
+        flex-direction: column;
+        position: absolute;
+        top: 62px;
+        left: 0;
+        right: 0;
+        background: var(--nav-bg);
+        border-bottom: 1px solid var(--card-border);
+        padding: 0.75rem 1rem;
+        gap: 0.25rem;
+      }
+      .nav-links a { width: 100%; display: block; }
+      .hamburger { display: flex; }
+      .page { padding: 2rem 1rem 3rem; }
+      .panel { padding: 1rem; border-radius: 18px; }
+      .md-input { min-height: 320px; }
+      .actions .btn { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toast-wrap" id="toasts"></div>
+
+  <nav class="navbar" role="navigation" aria-label="Main navigation">
+    <a href="/" class="logo" aria-label="MediaDL home">
+      <div class="logo-squares" aria-hidden="true">
+        <div class="logo-sq"></div><div class="logo-sq"></div>
+        <div class="logo-sq"></div><div class="logo-sq"></div>
+      </div>
+      <span class="nav-brand">MediaDL</span>
+    </a>
+    <ul class="nav-links" id="nav-links">
+      <li><a href="/">Home</a></li>
+      <li><a href="/course-generator" class="active">Course Generator</a></li>
+      <li><a href="/blog">Blogs</a></li>
+      <li><a href="/faq">FAQ</a></li>
+    </ul>
+    <div class="nav-right">
+      <button class="theme-btn" id="theme-btn" title="Toggle theme" aria-label="Toggle theme">
+        <svg id="theme-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
+      </button>
+      <button class="hamburger" id="hamburger" aria-label="Toggle menu" aria-expanded="false" aria-controls="nav-links">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+    </div>
+  </nav>
+
+  <main class="page">
+    <header class="page-head">
+      <div>
+        <h1>Markdown Course Generator</h1>
+        <p class="lead">Paste or upload any Markdown file and generate a structured course package with lessons, slides, scripts, quizzes, storyboards, YouTube planning, and web course JSON.</p>
+      </div>
+      <div class="status-pill" id="status-pill">Ready</div>
+    </header>
+
+    <section class="workspace" aria-label="Course generator workspace">
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">Source Markdown</div>
+        </div>
+
+        <div class="field">
+          <label for="md-file">Upload .md file</label>
+          <div class="upload-row">
+            <input class="file-input" id="md-file" type="file" accept=".md,text/markdown,text/plain">
+            <button class="btn btn-secondary" id="clear-btn" type="button">Clear</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="markdown-input">Markdown input</label>
+          <textarea class="md-input" id="markdown-input" spellcheck="false" placeholder="# Course Source&#10;&#10;## Topic 1&#10;&#10;Paste Markdown here or upload a file..."></textarea>
+        </div>
+
+        <div class="controls">
+          <div class="field">
+            <label for="target">Target</label>
+            <select id="target">
+              <option value="both" selected>Both</option>
+              <option value="youtube">YouTube</option>
+              <option value="web">Web App</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="audience">Audience</label>
+            <select id="audience">
+              <option value="beginner" selected>Beginner</option>
+              <option value="intermediate">Intermediate</option>
+              <option value="advanced">Advanced</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="mode">Mode</label>
+            <select id="mode">
+              <option value="original" selected>Original</option>
+              <option value="instructional">Instructional</option>
+              <option value="extractive">Extractive</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn-primary" id="preview-btn" type="button">Preview Course Plan</button>
+          <button class="btn btn-secondary" id="export-btn" type="button">Export Course Package</button>
+          <a class="btn btn-success" id="download-link" href="#" download style="display:none;">Download ZIP</a>
+        </div>
+      </div>
+
+      <aside class="panel preview" aria-live="polite">
+        <div class="panel-head">
+          <div class="panel-title">Generated Preview</div>
+        </div>
+        <div id="preview-content" class="empty-state">
+          Paste Markdown and click Preview Course Plan to inspect the generated modules and lesson assets.
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    function esc(str) {
+      return String(str).replace(/[&<>"']/g, function(c) {
+        return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+      });
+    }
+
+    const htmlEl = document.documentElement;
+    const themeBtn = document.getElementById('theme-btn');
+    const themeIcon = document.getElementById('theme-icon');
+    const ICONS = {
+      sun: `<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>`,
+      moon: `<path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/>`,
+    };
+    function applyTheme(t) {
+      htmlEl.setAttribute('data-theme', t);
+      themeIcon.innerHTML = (t === 'dark') ? ICONS.sun : ICONS.moon;
+      localStorage.setItem('theme', t);
+    }
+    themeBtn.addEventListener('click', () => applyTheme(htmlEl.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
+    applyTheme(localStorage.getItem('theme') || 'dark');
+
+    const markdownInput = document.getElementById('markdown-input');
+    const fileInput = document.getElementById('md-file');
+    const targetSelect = document.getElementById('target');
+    const audienceSelect = document.getElementById('audience');
+    const modeSelect = document.getElementById('mode');
+    const previewBtn = document.getElementById('preview-btn');
+    const exportBtn = document.getElementById('export-btn');
+    const clearBtn = document.getElementById('clear-btn');
+    const previewContent = document.getElementById('preview-content');
+    const downloadLink = document.getElementById('download-link');
+    const statusPill = document.getElementById('status-pill');
+    const toasts = document.getElementById('toasts');
+
+    function toast(message, type = 'info') {
+      const el = document.createElement('div');
+      el.className = `toast ${type}`;
+      el.textContent = message;
+      toasts.appendChild(el);
+      setTimeout(() => el.remove(), 4200);
+    }
+
+    function setBusy(isBusy, label) {
+      previewBtn.disabled = isBusy;
+      exportBtn.disabled = isBusy;
+      clearBtn.disabled = isBusy;
+      fileInput.disabled = isBusy;
+      markdownInput.disabled = isBusy;
+      statusPill.textContent = label || (isBusy ? 'Working' : 'Ready');
+    }
+
+    function buildPayload() {
+      const markdown = markdownInput.value.trim();
+      if (!markdown) throw new Error('Paste or upload a Markdown file first.');
+      return {
+        markdown,
+        target: targetSelect.value,
+        audience_level: audienceSelect.value,
+        transformation_mode: modeSelect.value,
+      };
+    }
+
+    function renderPreview(data) {
+      const course = data.course;
+      const analysis = data.analysis;
+      const moduleCards = course.modules.map(module => {
+        const lessons = module.lessons.map(lesson => `<li>${esc(lesson.title)}</li>`).join('');
+        return `
+          <article class="module-card">
+            <h3>${esc(module.title)}</h3>
+            <p style="color:var(--text-sub);font-size:0.86rem;line-height:1.55;">${esc(module.description)}</p>
+            <ul class="lesson-list">${lessons}</ul>
+          </article>
+        `;
+      }).join('');
+      previewContent.className = '';
+      previewContent.innerHTML = `
+        <div class="summary-grid">
+          <div class="metric"><div class="metric-label">Source</div><div class="metric-value">${esc(analysis.source_type)}</div></div>
+          <div class="metric"><div class="metric-label">Level</div><div class="metric-value">${esc(course.audience_level)}</div></div>
+          <div class="metric"><div class="metric-label">Lessons</div><div class="metric-value">${course.modules.reduce((sum, m) => sum + m.lessons.length, 0)}</div></div>
+        </div>
+        <div class="module-card">
+          <h3>${esc(course.title)}</h3>
+          <p style="color:var(--text-sub);font-size:0.9rem;line-height:1.6;">${esc(course.description)}</p>
+          <div class="asset-row">
+            <span class="asset-chip">Lessons</span>
+            <span class="asset-chip">Slides</span>
+            <span class="asset-chip">Video Scripts</span>
+            <span class="asset-chip">Storyboards</span>
+            <span class="asset-chip">Quizzes</span>
+            <span class="asset-chip">Web JSON</span>
+          </div>
+        </div>
+        <div class="module-list">${moduleCards}</div>
+      `;
+    }
+
+    async function previewCourse() {
+      try {
+        setBusy(true, 'Planning');
+        downloadLink.style.display = 'none';
+        const res = await fetch('/course/plan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(buildPayload()),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.detail || `Server error ${res.status}`);
+        renderPreview(body);
+        toast('Course plan generated.', 'success');
+        statusPill.textContent = 'Preview ready';
+      } catch (err) {
+        toast(err.message, 'error');
+        statusPill.textContent = 'Needs input';
+      } finally {
+        setBusy(false, statusPill.textContent);
+      }
+    }
+
+    async function exportCourse() {
+      try {
+        setBusy(true, 'Exporting');
+        const res = await fetch('/course/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(buildPayload()),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.detail || `Server error ${res.status}`);
+        downloadLink.href = body.download_url;
+        downloadLink.style.display = 'inline-flex';
+        statusPill.textContent = 'Package ready';
+        toast('Course package exported.', 'success');
+      } catch (err) {
+        toast(err.message, 'error');
+        statusPill.textContent = 'Export failed';
+      } finally {
+        setBusy(false, statusPill.textContent);
+      }
+    }
+
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      try {
+        markdownInput.value = await file.text();
+        statusPill.textContent = file.name;
+        toast('Markdown file loaded.', 'success');
+      } catch {
+        toast('Could not read the selected file.', 'error');
+      }
+    });
+    clearBtn.addEventListener('click', () => {
+      markdownInput.value = '';
+      fileInput.value = '';
+      downloadLink.style.display = 'none';
+      previewContent.className = 'empty-state';
+      previewContent.textContent = 'Paste Markdown and click Preview Course Plan to inspect the generated modules and lesson assets.';
+      statusPill.textContent = 'Ready';
+    });
+    previewBtn.addEventListener('click', previewCourse);
+    exportBtn.addEventListener('click', exportCourse);
+
+    const hamburger = document.getElementById('hamburger');
+    const navLinks = document.getElementById('nav-links');
+    hamburger.addEventListener('click', () => {
+      const open = navLinks.classList.toggle('open');
+      hamburger.setAttribute('aria-expanded', String(open));
+    });
+  </script>
+</body>
+</html>

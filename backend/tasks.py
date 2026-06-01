@@ -8,6 +8,11 @@ import yt_dlp  # type: ignore
 from config import BROWSER_COOKIE_SOURCES, COOKIES_FILE, FFMPEG_PATH, PLAYER_CLIENTS
 from models import is_cancelled, update_task
 
+try:
+    from markitdown import MarkItDown
+except ImportError:
+    MarkItDown = None
+
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 
 
@@ -35,6 +40,12 @@ def find_media_file(directory: str, fmt: str = "mp3"):
     """Return the first .mp3 or .mp4 file found in a directory, or None."""
     ext = ".mp4" if fmt == "mp4" else ".mp3"
     files = glob.glob(os.path.join(directory, f"*{ext}"))
+    return files[0] if files else None
+
+
+def find_markdown_file(directory: str):
+    """Return the first .md file found in a directory, or None."""
+    files = glob.glob(os.path.join(directory, "*.md"))
     return files[0] if files else None
 
 
@@ -307,6 +318,65 @@ def _extract_with_retry(
     raise type("RetryExhausted", (Exception,), {})(
         _friendly_error(_strip_ansi(str(last_error or "Unknown error")), browser_tried=False)  # type: ignore[arg-type]
     )
+
+
+def transcribe_youtube_to_markdown(
+    task_id: str,
+    url: str,
+    output_dir: str,
+    languages: list[str] | None = None,
+):
+    task_dir = os.path.join(output_dir, task_id)
+    os.makedirs(task_dir, exist_ok=True)
+    output_path = os.path.join(task_dir, "transcript.md")
+    transcript_languages = languages or ["en"]
+
+    try:
+        if MarkItDown is None:
+            raise RuntimeError(
+                "Markdown transcript support is not installed. "
+                "Install markitdown[youtube-transcription]."
+            )
+
+        if is_cancelled(task_id):
+            update_task(task_id, status="cancelled")
+            return
+
+        update_task(
+            task_id,
+            format="md",
+            progress_pct=10,
+            current_track="Fetching transcript",
+        )
+
+        result = MarkItDown().convert(
+            url,
+            youtube_transcript_languages=transcript_languages,
+        )
+        markdown = (getattr(result, "text_content", "") or "").strip()
+        if not markdown:
+            raise RuntimeError("No transcript text was returned for this video.")
+
+        with open(output_path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(markdown)
+            f.write("\n")
+
+        update_task(
+            task_id,
+            status="completed",
+            format="md",
+            result_file=output_path,
+            progress_pct=100,
+            current_track=None,
+        )
+    except Exception as exc:
+        update_task(
+            task_id,
+            status="error",
+            format="md",
+            error=str(exc),
+            current_track=None,
+        )
 
 
 def download_and_convert(

@@ -4,3 +4,4 @@ yt-dlp==2024.04.09
 ffmpeg-python==0.2.0
 aiofiles==23.2.1
 python-multipart==0.0.9
+markitdown[youtube-transcription]==0.1.6

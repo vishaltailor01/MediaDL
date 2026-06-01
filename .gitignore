@@ -9,6 +9,7 @@ build/
 develop-eggs/
 dist/
 downloads/
+backend/course_exports/
 eggs/
 .eggs/
 lib/

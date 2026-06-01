@@ -230,12 +230,12 @@
     .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
 
     /* Format Toggle */
-    .format-row { display: flex; gap: 0.6rem; margin-bottom: 1rem; }
+    .format-row { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 1rem; }
     .format-btn {
-      flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.45rem;
+      flex: 1 1 120px; display: flex; align-items: center; justify-content: center; gap: 0.45rem;
       padding: 0.7rem 1rem; min-height: 44px;
       background: var(--input-bg); border: 1.5px solid var(--input-border);
-      border-radius: 12px; font-family: inherit; font-size: 0.88rem; font-weight: 700;
+      border-radius: 12px; font-family: inherit; font-size: 0.84rem; font-weight: 700;
       color: var(--text-sub); cursor: pointer; transition: all 0.2s; -webkit-user-select: none; user-select: none;
     }
     .format-btn:hover { border-color: var(--accent); color: var(--accent); }
@@ -413,6 +413,7 @@
     .h-icon-mp3 { background: linear-gradient(135deg, var(--accent), var(--accent2)); }
     .h-icon-mp4 { background: linear-gradient(135deg, #ef4444, #f97316); }
     .h-icon-zip { background: linear-gradient(135deg, #10b981, #0d9488); }
+    .h-icon-md { background: linear-gradient(135deg, #0f766e, #14b8a6); }
     .h-info { flex: 1; min-width: 0; }
     .h-url { font-size: 0.78rem; color: var(--text-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .h-meta { display: flex; align-items: center; gap: 0.5rem; margin-top: 2px; }
@@ -424,6 +425,7 @@
     .h-fmt-mp3 { background: rgba(99,102,241,0.18); color: var(--accent); }
     .h-fmt-mp4 { background: rgba(239,68,68,0.15); color: #ef4444; }
     .h-fmt-zip { background: rgba(16,185,129,0.15); color: var(--success); }
+    .h-fmt-md { background: rgba(20,184,166,0.16); color: #0f766e; }
     .h-dl {
       flex-shrink: 0; background: none; border: 1px solid var(--input-border);
       border-radius: 8px; padding: 0.35rem 0.55rem; cursor: pointer;
@@ -592,6 +594,7 @@
     </a>
     <ul class="nav-links" id="nav-links">
       <li><a href="/" class="active">Home</a></li>
+      <li><a href="/course-generator">Course Generator</a></li>
       <li><a href="/blog">Blogs</a></li>
       <li><a href="/faq">FAQ</a></li>
     </ul>
@@ -661,6 +664,10 @@
         <button class="format-btn" id="fmt-mp4" type="button" data-fmt="mp4" aria-label="MP4 video format">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
           MP4 Video
+        </button>
+        <button class="format-btn" id="fmt-md" type="button" data-fmt="md" aria-label="Markdown transcript format">
+          <span class="fmt-icon">TXT</span>
+          Markdown Transcript
         </button>
       </div>
 
@@ -844,6 +851,32 @@
             return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
           });
         }
+        function truncate(str, maxLength) {
+          const text = String(str || '');
+          return text.length > maxLength ? `${text.slice(0, maxLength - 1)}...` : text;
+        }
+        function getUrlHost(url) {
+          try {
+            return new URL(url).hostname.toLowerCase();
+          } catch {
+            return '';
+          }
+        }
+        function isYouTubeUrl(url) {
+          const host = getUrlHost(url);
+          return host === 'youtu.be' || host === 'youtube.com' || host.endsWith('.youtube.com');
+        }
+        function isSupportedUrl(url) {
+          const host = getUrlHost(url);
+          return [
+            'youtu.be',
+            'youtube.com',
+            'tiktok.com',
+            'instagram.com',
+            'facebook.com',
+            'fb.watch'
+          ].some(domain => host === domain || host.endsWith(`.${domain}`));
+        }
     window.addEventListener('DOMContentLoaded', function() {
       // Copyright Modal Logic
       const copyrightModal = document.getElementById('copyright-modal');
@@ -876,10 +909,8 @@
         }
         copyrightAgreeBtn.addEventListener('click', () => {
           const agreementData = {
-            user_agent: navigator.userAgent,
-            language: navigator.language,
-            platform: navigator.platform,
-            timestamp: new Date().toISOString(),
+            agreement_version: 'copyright-v1',
+            user_id: null,
           };
           fetch('/api/agree', {
             method: 'POST',
@@ -959,6 +990,7 @@
       const trimStartInput    = document.getElementById('trim-start');
       const trimEndInput      = document.getElementById('trim-end');
       const fmtBtns           = document.querySelectorAll('.format-btn');
+      const optionsRow        = qualitySelect.closest('.options-row');
 
       let pollTimer    = null;
       let activeTaskId = null;
@@ -990,8 +1022,26 @@
       function setFormat(fmt) {
         currentFormat = fmt;
         fmtBtns.forEach(b => b.classList.toggle('active', b.dataset.fmt === fmt));
-        updateQualityOptions(fmt);
-        convertBtn.textContent = fmt === 'mp4' ? 'Download MP4 Video' : 'Convert to MP3';
+        convertBtn.textContent =
+          fmt === 'mp4'
+            ? 'Download MP4 Video'
+            : fmt === 'md'
+              ? 'Create Markdown Transcript'
+              : 'Convert to MP3';
+
+        if (optionsRow) optionsRow.style.display = fmt === 'md' ? 'none' : '';
+        if (trimToggle) trimToggle.style.display = fmt === 'md' ? 'none' : '';
+        if (trimSection) {
+          trimSection.style.display = fmt === 'md' ? 'none' : '';
+          if (fmt === 'md') {
+            trimSection.classList.remove('open');
+            trimToggle.classList.remove('open');
+            trimToggle.setAttribute('aria-expanded', 'false');
+            trimSection.setAttribute('aria-hidden', 'true');
+          }
+        }
+
+        if (fmt !== 'md') updateQualityOptions(fmt);
       }
 
       fmtBtns.forEach(btn => btn.addEventListener('click', () => {
@@ -1041,9 +1091,13 @@
           toast('Please enter a valid YouTube, TikTok, Instagram or Facebook URL', 'error');
           urlInput.focus(); return;
         }
+        if (currentFormat === 'md' && !isYouTubeUrl(url)) {
+          toast('Markdown transcripts are only supported for YouTube URLs', 'error');
+          urlInput.focus(); return;
+        }
 
-        const trimStart = trimStartInput.value.trim();
-        const trimEnd   = trimEndInput.value.trim();
+        const trimStart = currentFormat === 'md' ? '' : trimStartInput.value.trim();
+        const trimEnd   = currentFormat === 'md' ? '' : trimEndInput.value.trim();
         if (trimStart && trimEnd) {
           const toSecs = s => s.split(':').reverse().map(Number).reduce((a, v, i) => a + v * Math.pow(60, i), 0);
           if (toSecs(trimEnd) <= toSecs(trimStart)) {
@@ -1065,8 +1119,8 @@
               url,
               format:     currentFormat,
               quality:    qualitySelect.value,
-              trim_start: trimStart || null,
-              trim_end:   trimEnd   || null,
+              trim_start: currentFormat === 'md' ? '' : trimStart || null,
+              trim_end:   currentFormat === 'md' ? '' : trimEnd   || null,
             }),
           });
           if (!res.ok) {
@@ -1201,6 +1255,10 @@
           icon:  `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>`,
           label: 'Download MP4',
         },
+        md: {
+          icon:  `<span style="font-size:11px;font-weight:800;">TXT</span>`,
+          label: 'Download Markdown',
+        },
         zip: {
           icon:  `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
           label: 'Download ZIP',
@@ -1209,7 +1267,9 @@
 
       function getFormatKey(downloadUrl, fmt) {
         if (downloadUrl && /playlist_/.test(downloadUrl)) return 'zip';
-        return fmt === 'mp4' ? 'mp4' : 'mp3';
+        if (fmt === 'mp4') return 'mp4';
+        if (fmt === 'md') return 'md';
+        return 'mp3';
       }
 
       function showResult(downloadUrl, fmt) {
@@ -1237,6 +1297,7 @@
       const HIST_SVG = {
         mp3: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`,
         mp4: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>`,
+        md: `<span style="font-size:11px;font-weight:800;color:white;">TXT</span>`,
         zip: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
       };
 

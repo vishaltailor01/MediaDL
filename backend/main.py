@@ -58,7 +58,10 @@ from urllib.parse import urlparse, urlunparse
 
 import tasks as yt_tasks
 from config import MP3_QUALITIES, MP4_QUALITIES
+from course_generator.schemas import CourseExportResponse, CoursePlanRequest
+from course_generator.service import create_course_export, create_course_plan
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi import Response
 from fastapi.staticfiles import StaticFiles
 from models import cancel_task, cleanup_old_tasks, create_task, get_task, update_task
 
@@ -197,9 +200,22 @@ def _validate_url(url: str) -> None:
 
 
 # ─── Path constants ────────────────────────────────────────────────────────────
+def _is_youtube_url(url: str) -> bool:
+    try:
+        hostname = (urlparse(url.strip()).hostname or "").lower()
+    except Exception:
+        return False
+    return (
+        hostname == "youtu.be"
+        or hostname == "youtube.com"
+        or hostname.endswith(".youtube.com")
+    )
+
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 DOWNLOAD_DIR = os.path.join(BASE_DIR, "downloads")
+COURSE_EXPORT_DIR = os.path.join(BASE_DIR, "course_exports")
 
 
 # ─── Lifespan (replaces deprecated @app.on_event) ─────────────────────────────
@@ -230,6 +246,7 @@ def _start_cleanup_thread():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+    os.makedirs(COURSE_EXPORT_DIR, exist_ok=True)
     _start_cleanup_thread()
     yield
 
@@ -294,7 +311,7 @@ class AgreementData(BaseModel):
 @app.post("/api/agree")
 async def log_user_agreement(data: AgreementData, request: Request):
     if not supabase:
-        raise HTTPException(status_code=500, detail="Supabase client not available")
+        return {"status": "ok", "logged": False}
     ip_address = request.client.host if request.client else "unknown"
     user_agent = request.headers.get("user-agent", "")
     now = datetime.utcnow().isoformat()
@@ -314,7 +331,7 @@ async def log_user_agreement(data: AgreementData, request: Request):
     )
     if hasattr(res, "status_code") and res.status_code >= 400:
         raise HTTPException(status_code=500, detail="Failed to log agreement")
-    return {"status": "ok"}
+    return {"status": "ok", "logged": True}
 
 
 # Serve static frontend
@@ -336,6 +353,16 @@ async def _security_headers(request: Request, call_next):
 @app.get("/")
 def root():
     return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return Response(status_code=204)
+
+
+@app.get("/course-generator")
+def course_generator_page():
+    return FileResponse(os.path.join(STATIC_DIR, "course-generator.html"))
 
 
 @app.get("/faq")
@@ -393,6 +420,39 @@ def admin_dashboard():
 @app.get("/health")
 def health_check():
     return JSONResponse(content={"status": "ok"})
+
+
+@app.post("/course/plan")
+def plan_course(request: CoursePlanRequest):
+    return create_course_plan(request)
+
+
+@app.post("/course/export")
+def export_course(request: CoursePlanRequest):
+    os.makedirs(COURSE_EXPORT_DIR, exist_ok=True)
+    _, zip_path = create_course_export(request, COURSE_EXPORT_DIR)
+    package_id = os.path.splitext(os.path.basename(zip_path))[0]
+    return CourseExportResponse(
+        package_id=package_id,
+        download_url=f"/course/download/{package_id}",
+    )
+
+
+@app.get("/course/download/{package_id}")
+def download_course_package(package_id: str):
+    if not re.match(r"^[a-zA-Z0-9_.-]+$", package_id):
+        raise HTTPException(status_code=404, detail="Package not found")
+    zip_path = os.path.realpath(os.path.join(COURSE_EXPORT_DIR, f"{package_id}.zip"))
+    real_export_dir = os.path.realpath(COURSE_EXPORT_DIR)
+    if not zip_path.startswith(real_export_dir + os.sep):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if not os.path.exists(zip_path):
+        raise HTTPException(status_code=404, detail="Package not found")
+    return FileResponse(
+        zip_path,
+        filename=f"{package_id}.zip",
+        media_type="application/zip",
+    )
 
 
 # ─── Admin blocklist endpoints ─────────────────────────────────────────────────
@@ -455,13 +515,21 @@ async def start_download(request: Request, background_tasks: BackgroundTasks):
     url = (data.get("url") or "").strip()
     _validate_url(url)  # SSRF protection: rejects private IPs, file://, etc.
     fmt = str(data.get("format", "mp3")).lower()
-    if fmt not in ("mp3", "mp4"):
+    if fmt not in ("mp3", "mp4", "md"):
         fmt = "mp3"
-    default_quality = "192" if fmt == "mp3" else "720"
+    default_quality = "720" if fmt == "mp4" else "192"
     quality = str(data.get("quality", default_quality))
-    valid_qualities = MP3_QUALITIES if fmt == "mp3" else MP4_QUALITIES
-    if quality not in valid_qualities:
+    if fmt == "md":
         quality = default_quality
+    else:
+        valid_qualities = MP3_QUALITIES if fmt == "mp3" else MP4_QUALITIES
+        if quality not in valid_qualities:
+            quality = default_quality
+    if fmt == "md" and not _is_youtube_url(url):
+        raise HTTPException(
+            status_code=400,
+            detail="Markdown transcripts are only supported for YouTube URLs",
+        )
     trim_start = str(data.get("trim_start") or "").strip() or None
     trim_end = str(data.get("trim_end") or "").strip() or None
     blocked, reason = _bl_is_blocked(url)
@@ -478,16 +546,24 @@ async def start_download(request: Request, background_tasks: BackgroundTasks):
     update_task(task_id, format=fmt)
     output_dir = DOWNLOAD_DIR
     os.makedirs(output_dir, exist_ok=True)
-    background_tasks.add_task(
-        yt_tasks.download_and_convert,
-        task_id,
-        url,
-        output_dir,
-        quality,
-        fmt,
-        trim_start,
-        trim_end,
-    )
+    if fmt == "md":
+        background_tasks.add_task(
+            yt_tasks.transcribe_youtube_to_markdown,
+            task_id,
+            url,
+            output_dir,
+        )
+    else:
+        background_tasks.add_task(
+            yt_tasks.download_and_convert,
+            task_id,
+            url,
+            output_dir,
+            quality,
+            fmt,
+            trim_start,
+            trim_end,
+        )
     return {"task_id": task_id}
 
 
@@ -529,7 +605,12 @@ def download_file(task_id: str):
         raise HTTPException(status_code=404, detail="File missing on disk")
     filename = os.path.basename(real_path)
     ext = os.path.splitext(filename)[1].lower()
-    media_types = {".mp3": "audio/mpeg", ".mp4": "video/mp4", ".zip": "application/zip"}
+    media_types = {
+        ".mp3": "audio/mpeg",
+        ".mp4": "video/mp4",
+        ".zip": "application/zip",
+        ".md": "text/markdown",
+    }
     media_type = media_types.get(ext, "application/octet-stream")
     return FileResponse(real_path, filename=filename, media_type=media_type)
 
