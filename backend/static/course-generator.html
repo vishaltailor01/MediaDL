@@ -273,6 +273,11 @@
       color: var(--text);
     }
     .btn-success { background: var(--success); color: #fff; }
+    .btn-media {
+      background: linear-gradient(135deg, #10b981, #06b6d4);
+      color: #fff;
+      box-shadow: 0 4px 20px rgba(16, 185, 129, 0.35);
+    }
     .btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
     .btn:hover:not(:disabled) { transform: translateY(-1px); }
     .preview {
@@ -499,6 +504,7 @@
         <div class="actions">
           <button class="btn btn-primary" id="preview-btn" type="button">Preview Course Plan</button>
           <button class="btn btn-secondary" id="export-btn" type="button">Export Course Package</button>
+          <button class="btn btn-media" id="media-btn" type="button">Generate Course Video</button>
           <a class="btn btn-success" id="download-link" href="#" download style="display:none;">Download ZIP</a>
         </div>
       </div>
@@ -543,6 +549,7 @@
     const modeSelect = document.getElementById('mode');
     const previewBtn = document.getElementById('preview-btn');
     const exportBtn = document.getElementById('export-btn');
+    const mediaBtn = document.getElementById('media-btn');
     const clearBtn = document.getElementById('clear-btn');
     const previewContent = document.getElementById('preview-content');
     const downloadLink = document.getElementById('download-link');
@@ -560,6 +567,7 @@
     function setBusy(isBusy, label) {
       previewBtn.disabled = isBusy;
       exportBtn.disabled = isBusy;
+      mediaBtn.disabled = isBusy;
       clearBtn.disabled = isBusy;
       fileInput.disabled = isBusy;
       markdownInput.disabled = isBusy;
@@ -676,8 +684,68 @@
       previewContent.textContent = 'Paste Markdown and click Preview Course Plan to inspect the generated modules and lesson assets.';
       statusPill.textContent = 'Ready';
     });
+    async function generateMedia() {
+      try {
+        const markdown = markdownInput.value.trim();
+        if (!markdown) throw new Error('Paste or upload a Markdown file first.');
+        
+        setBusy(true, 'Initiating media task');
+        downloadLink.style.display = 'none';
+        
+        const blob = new Blob([markdown], { type: 'text/markdown' });
+        const file = new File([blob], 'course.md');
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const res = await fetch('/course/generate-media', {
+          method: 'POST',
+          body: formData,
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.detail || `Server error ${res.status}`);
+        
+        const taskId = body.task_id;
+        toast('Media generation task started. Staging...', 'info');
+        pollTask(taskId);
+      } catch (err) {
+        toast(err.message, 'error');
+        setBusy(false, 'Media generation failed');
+      }
+    }
+
+    function pollTask(taskId) {
+      const interval = setInterval(async () => {
+        try {
+          const res = await fetch(`/status/${taskId}`);
+          if (!res.ok) throw new Error(`Status check failed (${res.status})`);
+          
+          const body = await res.json();
+          if (body.status === 'completed') {
+            clearInterval(interval);
+            downloadLink.href = body.download_url;
+            downloadLink.style.display = 'inline-flex';
+            toast('Course video and subtitles generated!', 'success');
+            setBusy(false, 'Video Ready');
+          } else if (body.status === 'error') {
+            clearInterval(interval);
+            toast(`Generation failed: ${body.error}`, 'error');
+            setBusy(false, 'Generation failed');
+          } else {
+            const progress = body.progress_pct || 0;
+            const track = body.current_track || 'Processing...';
+            statusPill.textContent = `${track} (${progress}%)`;
+          }
+        } catch (err) {
+          clearInterval(interval);
+          toast(err.message, 'error');
+          setBusy(false, 'Status check error');
+        }
+      }, 2000);
+    }
+
     previewBtn.addEventListener('click', previewCourse);
     exportBtn.addEventListener('click', exportCourse);
+    mediaBtn.addEventListener('click', generateMedia);
 
     const hamburger = document.getElementById('hamburger');
     const navLinks = document.getElementById('nav-links');
