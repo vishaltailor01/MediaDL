@@ -42,6 +42,8 @@ def _ensure_kokoro_files() -> tuple[str, str]:
 def synthesize_narration(text: str, temp_dir: str) -> str:
     """
     Synthesizes narration speech using Kokoro-ONNX.
+    Handles text length limitations by splitting long text into smaller sentences,
+    synthesizing each sentence, and concatenating the audio.
     Saves the output as a local temporary .wav file.
     """
     if not text.strip():
@@ -55,18 +57,90 @@ def synthesize_narration(text: str, temp_dir: str) -> str:
         
     import uuid
     import soundfile as sf
+    import numpy as np
+    import re
+
+    # Helper to split text into chunks (sentences/phrases) within ~250 characters
+    def split_text_to_chunks(input_text: str, max_chars: int = 250) -> list[str]:
+        # Split by periods, question marks, exclamation marks, or newlines
+        sentences = re.split(r'(?<=[.?!])\s+|\n+', input_text)
+        
+        chunks = []
+        current_chunk = []
+        current_len = 0
+        
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+                
+            if len(sentence) > max_chars:
+                if current_chunk:
+                    chunks.append(" ".join(current_chunk))
+                    current_chunk = []
+                    current_len = 0
+                    
+                # Split long sentence by clauses (commas)
+                sub_sentences = re.split(r'(?<=,)\s+', sentence)
+                for sub_s in sub_sentences:
+                    if len(sub_s) > max_chars:
+                        # Split by space
+                        words = sub_s.split(" ")
+                        temp_w = []
+                        temp_len = 0
+                        for w in words:
+                            if temp_len + len(w) + 1 > max_chars:
+                                chunks.append(" ".join(temp_w))
+                                temp_w = [w]
+                                temp_len = len(w)
+                            else:
+                                temp_w.append(w)
+                                temp_len += len(w) + 1
+                        if temp_w:
+                            chunks.append(" ".join(temp_w))
+                    else:
+                        chunks.append(sub_s)
+            else:
+                if current_len + len(sentence) + 1 > max_chars:
+                    chunks.append(" ".join(current_chunk))
+                    current_chunk = [sentence]
+                    current_len = len(sentence)
+                else:
+                    current_chunk.append(sentence)
+                    current_len += len(sentence) + 1
+                    
+        if current_chunk:
+            chunks.append(" ".join(current_chunk))
+            
+        return [c.strip() for c in chunks if c.strip()]
+
+    chunks = split_text_to_chunks(text)
+    all_samples = []
+    sample_rate = 24000
     
-    # Generate speech
-    samples, sample_rate = _kokoro_model.create(
-        text,
-        voice="af_sarah",
-        speed=1.0,
-        lang="en-us"
-    )
-    
+    for chunk in chunks:
+        samples, sr = _kokoro_model.create(
+            chunk,
+            voice="af_sarah",
+            speed=1.0,
+            lang="en-us"
+        )
+        sample_rate = sr
+        all_samples.append(samples)
+        # Add a short 0.25 second silence between chunks for natural cadence
+        silence = np.zeros(int(sample_rate * 0.25), dtype=np.float32)
+        all_samples.append(silence)
+        
+    if all_samples:
+        all_samples.pop()  # Remove the trailing silence
+        final_samples = np.concatenate(all_samples)
+    else:
+        final_samples = np.zeros(0, dtype=np.float32)
+        
     out_wav_path = os.path.join(temp_dir, f"narration_{uuid.uuid4().hex}.wav")
-    sf.write(out_wav_path, samples, sample_rate)
+    sf.write(out_wav_path, final_samples, sample_rate)
     return out_wav_path
+
 
 
 async def render_slide_playwright(title: str, code_snippet: str, output_path: str) -> None:
